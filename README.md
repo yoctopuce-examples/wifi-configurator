@@ -7,6 +7,9 @@ existing Wi-Fi network. It leverages the Yoctopuce
 programming library to interact with the YoctoHub 
 over USB.
 
+For more details, read [our blog article describing
+this tool](https://www.yoctopuce.com/EN/article/a-small-configuration-tool)
+
 ### Starting the tool
 
 If you want to run this tool from its Python source code,

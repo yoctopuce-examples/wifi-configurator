@@ -1,6 +1,6 @@
-import re
+import re, base64
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, PhotoImage
 from yocto_api import YAPI, YRefParam
 from yocto_network import YNetwork
 from yocto_wireless import YWireless, YWlanRecord
@@ -9,15 +9,29 @@ from yocto_wireless import YWireless, YWlanRecord
 FONT_NAME = "Arial"
 FONT_SIZE = 11
 
-# Unicode constants for eye icons
-EYE_OPEN = "\U0001F441"
-EYE_CLOSED = "\U0001F648"
+# Show/hide password icons
+EYE_OPEN_BASE64 = """
+iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAMAAAC6V+0/AAAAOVBMVEUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC8dlA9AAAAEnRSTlMAyBEL26JjjVGM7NS9r5N2P1Ml8aZ0AAAAW0lEQVQY072O
+zQ6AIAyDO8bGkF95/4fVqIkHONNLmy9pWuyV0+KJfFH3o0hHdbfXg+KHjUzDG4ManU8QBjF6Sh1MYAmANIAz4MfwQGagyRoi
+zvV5yNaX5vNbdQGSlwMg3bc61QAAAABJRU5ErkJggg==
+"""
+EYE_CLOSED_BASE64 = """
+iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAMAAAC6V+0/AAAAdVBMVEUAAAAFBQUJCQkdHR0HBwcrKys7OztjY2NycnIEBAQT
+ExMaGhovLy83NzdAQEBBQUFERERKSkpQUFBaWlpnZ2dtbW13d3cAAAACAgIICAgODg4WFhYaGhogICApKSk1NTU6OjpOTk5T
+U1NWVlZfX19nZ2dra2uS+0oHAAAAJ3RSTlMA7uW66qB9LxTxzbyWhnhwamBVQScdC/r259TKxLOiiYBaTkw4KiLMzEeCAAAA
+cklEQVQY082MVw6DQBBDty8ldEJC79z/iKxBCDgAEv7wjJ81Q94oZ7pnXRiLhL6ylIUYgR2fbKBqm8phPNlRUovSw2JRnSlG
+uZRc5J6V2l8DPxLVP/D98JchN8ZcNAtFw2Zcusf/sYLzmFzVt/AuIo9pBbZbBA3Pk1BdAAAAAElFTkSuQmCC
+"""
 
 # Yoctopuce objects
 wireless: YWireless
 network: YNetwork
-wlans: list[YWlanRecord] = []
-nameChanged = False
+
+# Other globals
+wlans: list = []
+name_changed = False
+not_found_msg = "No YoctoHub-Wireless-n found"
 
 def detect_yoctohub():
     global wireless, network
@@ -34,7 +48,7 @@ def detect_yoctohub():
     YAPI.UpdateDeviceList(errmsg)
     wireless = YWireless.FirstWireless()
     if wireless is None:
-        error_label.config(text="No YoctoHub-Wireless-n found")
+        error_label.config(text=not_found_msg)
         window.after(100, detect_yoctohub)
         return
     serial = wireless.get_serialNumber()
@@ -42,14 +56,35 @@ def detect_yoctohub():
     error_label.config(text="")
     init_frame.pack_forget()
     main_frame.pack(fill=tk.BOTH, expand=True)
-    device_name.set(network.get_logicalName())
-    device_name.trace_add("write", on_device_name_change)
-    refresh_networks(True, 2)
-    update_diagnostics()
+    window.after(500, read_current_config)
+
+def read_current_config():
+    if not network.isOnline():
+        device_name.set("")
+        module_disconnected()
+        return
+    try:
+        device_name.set(network.get_logicalName())
+        device_name.trace_add("write", on_device_name_change)
+        refresh_networks(True, 2)
+        update_diagnostics()
+    except YAPI.YAPI_Exception:
+        window.after(100, read_current_config)
+
+def module_disconnected():
+    global not_found_msg
+    not_found_msg = "Error: the device has been disconnected"
+    error_label.config(text=not_found_msg)
+    main_frame.pack_forget()
+    init_frame.pack(fill=tk.BOTH, expand=True)
+    window.after(1000, detect_yoctohub)
 
 def refresh_networks(quick=False, retries = 3):
     """Updates the list of available wireless networks"""
     global wlans, selected_network
+    if not wireless.isOnline():
+        module_disconnected()
+        return
     if not quick:
         wireless.startWlanScan()
         window.after(2000, refresh_networks, True, retries)
@@ -116,10 +151,10 @@ def toggle_password_visibility():
     """Toggles the visibility of the password"""
     if password_entry.cget('show') == "*":
         password_entry.config(show="")
-        eye_button.config(text=EYE_CLOSED)
+        eye_button.config(image=eye_closed)
     else:
         password_entry.config(show="*")
-        eye_button.config(text=EYE_OPEN)
+        eye_button.config(image=eye_open)
 
 
 def connect_to_wifi():
@@ -144,52 +179,54 @@ def connect_to_wifi():
 def update_diagnostics():
     """Simulates updating diagnostic information."""
     if not network.isOnline():
-        messagebox.showwarning("Error", "YoctoHub-Wireless-n disconnected")
-        window.destroy()
+        module_disconnected()
         return
-    ip = network.get_ipAddress()
-    rdy = network.get_readiness()
-    chan = wireless.get_channel()
-    linkq = wireless.get_linkQuality()
-    readinames = [ "down", "network exists", "network linked", "LAN ready", "WWW ready" ]
-    conn_status.set(f"{rdy}- {readinames[rdy]}")
-    last_message.set(wireless.get_message())
-    if chan > 0:
-        link_quality.set(f"{linkq}% (channel {chan})")
-    elif linkq > 0:
-        link_quality.set(f"{linkq}%")
-    else:
-        link_quality.set("")
-    if ip == "0.0.0.0":
-        ip_address.set('')
-    else:
-        ip_address.set(ip)
+    try:
+        ip = network.get_ipAddress()
+        rdy = network.get_readiness()
+        chan = wireless.get_channel()
+        linkq = wireless.get_linkQuality()
+        readinames = [ "down", "network exists", "network linked", "LAN ready", "WWW ready" ]
+        conn_status.set(f"{rdy}- {readinames[rdy]}")
+        last_message.set(wireless.get_message())
+        if chan > 0:
+            link_quality.set(f"{linkq}% (channel {chan})")
+        elif linkq > 0:
+            link_quality.set(f"{linkq}%")
+        else:
+            link_quality.set("")
+        if ip == "0.0.0.0":
+            ip_address.set('')
+        else:
+            ip_address.set(ip)
+    except YAPI.YAPI_Exception:
+        pass
     window.after(500, update_diagnostics)
 
 
 def on_device_name_change(*args):
     """Callback triggered when the device name changes"""
-    global nameChanged
-    nameChanged = True
+    global name_changed
+    name_changed = True
     apply_button.config(state="normal")
 
 def apply_device_name():
     """Applies the new device name."""
-    global nameChanged
+    global name_changed
     new_name = device_name_entry.get()
-    if not re.match("^[A-Za-z0-9_-]{1,15}$", new_name):
+    if not re.match("^[-A-Za-z0-9]{1,15}$", new_name):
         messagebox.showerror("Invalid Name",
-                             "Device name can only contain alphanumeric characters, '-', or '_'"+
+                             "Device name can only contain alphanumeric characters and '-'"+
                              ", and must be at most 15 characters long.")
         return False
     network.set_logicalName(new_name)
     apply_button.config(state="disabled")
-    nameChanged = False
+    name_changed = False
     return True
 
 def save_settings():
-    global nameChanged
-    if nameChanged and not apply_device_name():
+    global name_changed
+    if name_changed and not apply_device_name():
         return
     network.get_module().saveToFlash()
     window.destroy()
@@ -198,6 +235,8 @@ def save_settings():
 window = tk.Tk()
 window.title("Wi-Fi configuration tool")
 window.option_add("*Font", f"{FONT_NAME} {FONT_SIZE}")
+eye_open = PhotoImage(data=base64.b64decode(EYE_OPEN_BASE64))
+eye_closed = PhotoImage(data=base64.b64decode(EYE_CLOSED_BASE64))
 
 # Placeholder frame (initial view)
 init_frame = tk.Frame(window)
@@ -227,8 +266,8 @@ device_name_frame = tk.Frame(config_frame)
 device_name_frame.pack(fill="x", pady=5)
 device_name_label = tk.Label(device_name_frame, text="Device Name:")
 device_name_label.pack(side="left", padx=5)
-device_name = tk.StringVar(value="MyDevice")  # Default device name
-device_name_entry = tk.Entry(device_name_frame, textvariable=device_name, width=15)
+device_name = tk.StringVar(value="")
+device_name_entry = tk.Entry(device_name_frame, textvariable=device_name, width=18)
 device_name_entry.pack(side="left", padx=5)
 apply_button = ttk.Button(device_name_frame, text="Apply", command=apply_device_name, state="disabled")
 apply_button.pack(side="right", padx=5)
@@ -253,7 +292,7 @@ password_label = tk.Label(password_frame, text="Password:", fg="gray")
 password_label.pack(side="left", padx=5)
 password_entry = tk.Entry(password_frame, show="*", width=30, state="disabled")
 password_entry.pack(side="left", padx=5)
-eye_button = tk.Button(password_frame, text=EYE_OPEN, command=toggle_password_visibility,
+eye_button = tk.Button(password_frame, image=eye_open, command=toggle_password_visibility,
                        font=(FONT_NAME, FONT_SIZE+2), relief="flat", state="disabled")
 eye_button.pack(side="left")
 connect_button = ttk.Button(password_frame, text="Connect", command=connect_to_wifi, state="disabled")

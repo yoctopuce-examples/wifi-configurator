@@ -1,6 +1,6 @@
 import subprocess
 import platform
-
+import os
 
 def get_current_ssid():
     """

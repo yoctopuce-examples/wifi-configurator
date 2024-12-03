@@ -83,14 +83,16 @@ def get_wifi_password_win(ssid):
 
 
 def get_wifi_password(ssid):
-    result = subprocess.run(
-        ["netsh", "wlan", "show", "profile", f"name={ssid}", "key=clear"],
-        capture_output=True, text=True, check=True
-    )
-    for line in result.stdout.splitlines():
-        if "Key Content" in line:
-            return line.split(":")[1].strip()
-    return None
+    """
+    return passworkd for a wifi network
+    """
+    system = platform.system()
+    if system == "Windows":
+        return get_wifi_password_win(ssid)
+    elif system == "Linux":
+        return get_wifi_password_linux(ssid)
+    else:
+        return get_wifi_password_macos(ssid)
 
 
 def main():

@@ -28,12 +28,12 @@ def get_current_ssid_linux():
 
 def get_current_ssid_win():
     result = subprocess.run(
-        ["netsh", "wlan", "show"],
+        ["netsh", "wlan", "show","profile"],
         capture_output=True, text=True, check=True
     )
     lines = result.stdout.strip().split("\n")
     for line in lines:
-        if line.startswith("All User Profile"):
+        if "All User Profile" in line:
             return line.split(":")[1].strip()
     return None
 

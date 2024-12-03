@@ -1,30 +1,57 @@
-import subprocess
 import platform
-import os
+import subprocess
+
+
+def get_current_ssid_macos():
+    result = subprocess.run(
+        ["networksetup", "-getairportnetwork", "en0"],
+        capture_output=True, text=True, check=True
+    )
+    output = result.stdout.strip()
+    if "Current Wi-Fi Network" in output:
+        ssid = output.split(": ")[1]
+        return ssid
+    return None
+
+
+def get_current_ssid_linux():
+    result = subprocess.run(
+        ["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"],
+        capture_output=True, text=True, check=True
+    )
+    lines = result.stdout.strip().split("\n")
+    for line in lines:
+        if line.startswith("yes:"):
+            return line.split(":")[1]
+    return None
+
+
+def get_current_ssid_win():
+    result = subprocess.run(
+        ["netsh", "wlan", "show"],
+        capture_output=True, text=True, check=True
+    )
+    lines = result.stdout.strip().split("\n")
+    for line in lines:
+        if line.startswith("All User Profile"):
+            return line.split(":")[1].strip()
+    return None
+
 
 def get_current_ssid():
     """
-    Obtient le SSID du réseau Wi-Fi actuellement connecté.
+    return current used SSID
     """
-    try:
-        result = subprocess.run(
-            ["networksetup", "-getairportnetwork", "en0"],
-            capture_output=True, text=True, check=True
-        )
-        output = result.stdout.strip()
-        if "Current Wi-Fi Network" in output:
-            ssid = output.split(": ")[1]
-            return ssid
-        return None
-    except subprocess.CalledProcessError as e:
-        print(f"Erreur lors de la récupération du SSID : {e}")
-        return None
+    system = platform.system()
+    if system == "Windows":
+        return get_current_ssid_win()
+    elif system == "Linux":
+        return get_current_ssid_linux()
+    else:
+        return get_current_ssid_macos()
 
 
-def get_wifi_password(ssid):
-    """
-    Obtient le mot de passe Wi-Fi pour un SSID donné.
-    """
+def get_wifi_password_macos(ssid):
     try:
         result = subprocess.run(
             ["security", "find-generic-password", "-D", "AirPort network password", "-a", ssid, "-w"],
@@ -40,76 +67,44 @@ def get_wifi_password(ssid):
         return None
 
 
-def get_current_ssid_linux():
-    """
-    Obtient le SSID du réseau Wi-Fi actuellement connecté.
-    """
-    try:
-        result = subprocess.run(
-            ["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"],
-            capture_output=True, text=True, check=True
-        )
-        lines = result.stdout.strip().split("\n")
-        for line in lines:
-            if line.startswith("yes:"):
-                return line.split(":")[1]
-        return None
-    except subprocess.CalledProcessError as e:
-        print(f"Erreur lors de la récupération du SSID : {e}")
-        return None
-
 def get_wifi_password_linux(ssid):
-    """
-    Obtient le mot de passe Wi-Fi pour un SSID donné.
-    """
-    connection_file = f"/etc/NetworkManager/system-connections/{ssid}.nmconnection"
-    try:
-        if not os.path.exists(connection_file):
-            print(f"Fichier de configuration introuvable pour le réseau : {ssid}")
-            return None
+    return None
 
-        # Lire le fichier de configuration
-        with open(connection_file, "r") as file:
-            lines = file.readlines()
-            for line in lines:
-                if line.startswith("psk="):
-                    return line.split("=")[1].strip()
-        print(f"Aucun mot de passe trouvé pour le réseau : {ssid}")
-        return None
-    except Exception as e:
-        print(f"Erreur lors de la récupération du mot de passe : {e}")
-        return None
 
+def get_wifi_password_win(ssid):
+    result = subprocess.run(
+        ["netsh", "wlan", "show", "profile", f"name={ssid}", "key=clear"],
+        capture_output=True, text=True, check=True
+    )
+    for line in result.stdout.splitlines():
+        if "Key Content" in line:
+            return line.split(":")[1].strip()
+    return None
+
+
+def get_wifi_password(ssid):
+    result = subprocess.run(
+        ["netsh", "wlan", "show", "profile", f"name={ssid}", "key=clear"],
+        capture_output=True, text=True, check=True
+    )
+    for line in result.stdout.splitlines():
+        if "Key Content" in line:
+            return line.split(":")[1].strip()
+    return None
 
 
 def main():
-    system = platform.system()
-    if system == "Windows":
-        print("windows")
-    elif system == "Linux":
-        ssid = get_current_ssid_linux()
-        if not ssid:
-            print("Non connecté à un réseau Wi-Fi.")
-            return
+    ssid = get_current_ssid()
+    if not ssid:
+        print("Not connected to a WiFi network.")
+        return
 
-        print(f"SSID : {ssid}")
-        password = get_wifi_password_linux(ssid)
-        if password:
-            print(f"Mot de passe : {password}")
-        else:
-            print("Impossible de récupérer le mot de passe.")
+    print(f"SSID : {ssid}")
+    password = get_wifi_password(ssid)
+    if password:
+        print(f"Passwd : {password}")
     else:
-        ssid = get_current_ssid()
-        if not ssid:
-            print("Non connecté à un réseau Wi-Fi.")
-            return
-
-        print(f"SSID : {ssid}")
-        password = get_wifi_password(ssid)
-        if password:
-            print(f"Mot de passe : {password}")
-        else:
-            print("Impossible de récupérer le mot de passe.")
+        print("Unable to get Wifi password.")
 
 
 if __name__ == "__main__":

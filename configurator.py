@@ -34,7 +34,10 @@ uZRc5J6V2l8DPxLVP/D98JchN8ZcNAtFw2Zcusf/sYLzmFzVt/AuIo9pBbZbBA3Pk1BdAAAAAElFTkSu
 def get_current_ssid_macos():
     result = subprocess.run(
         ["networksetup", "-getairportnetwork", "en0"],
-        capture_output=True, text=True, check=True
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=True
     )
     output = result.stdout.strip()
     if "Current Wi-Fi Network" in output:
@@ -46,7 +49,10 @@ def get_current_ssid_macos():
 def get_current_ssid_linux():
     result = subprocess.run(
         ["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"],
-        capture_output=True, text=True, check=True
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=True
     )
     lines = result.stdout.strip().split("\n")
     for line in lines:
@@ -58,8 +64,11 @@ def get_current_ssid_linux():
 def get_current_ssid_win():
     try:
         result = subprocess.run(
-            ["netsh", "wlan", "show","profile"],
-            capture_output=True, text=True, check=True
+            ["netsh", "wlan", "show", "profile"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            check=True
         )
         lines = result.stdout.strip().split("\n")
         for line in lines:
@@ -87,7 +96,10 @@ def get_wifi_password_macos(ssid):
     try:
         result = subprocess.run(
             ["security", "find-generic-password", "-D", "AirPort network password", "-a", ssid, "-w"],
-            capture_output=True, text=True, check=True
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            check=True
         )
         password = result.stdout.strip()
         return password
@@ -106,7 +118,10 @@ def get_wifi_password_linux(ssid):
 def get_wifi_password_win(ssid):
     result = subprocess.run(
         ["netsh", "wlan", "show", "profile", f"name={ssid}", "key=clear"],
-        capture_output=True, text=True, check=True
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=True
     )
     for line in result.stdout.splitlines():
         if "Key Content" in line:
@@ -125,6 +140,7 @@ def get_wifi_password(ssid):
         return get_wifi_password_linux(ssid)
     else:
         return get_wifi_password_macos(ssid)
+
 
 computer_ssid = get_current_ssid()
 
@@ -214,7 +230,7 @@ def refresh_networks(quick=False, retries=3):
     headers = ["SSID", "Encryption", "Signal Strength"]
     for col, header in enumerate(headers):
         (tk.Label(networks_frame, text=header, font=(FONT_NAME, FONT_SIZE, "bold")).
-         grid(row=0, column=col, padx=5, pady=2,sticky="w"))
+         grid(row=0, column=col, padx=5, pady=2, sticky="w"))
     for row, wlan in enumerate(wlans, start=1):
         tk.Radiobutton(
             networks_frame,
@@ -347,16 +363,21 @@ def apply_computer_settings():
     print("poeut")
     ssid = get_current_ssid()
     if ssid is None:
-        messagebox.showerror("Error", "Message")
+        messagebox.showerror("Error", "Unable to determine current SSID used by the computer")
         return
     selected_network.set(ssid)
+    system = platform.system()
+    if system == "Linux":
+        messagebox.showwarning("Warning", "Decoding of network password is not supported on Linux.")
+        return
     password = get_wifi_password(ssid)
     if password is None:
-        messagebox.showerror("Title", "Message")
+        messagebox.showerror("Error", "Unable to get current password for %s network.\nRetry with admin rights" % ssid)
         return
-    #password_entry.set(password)
+    # password_entry.set(password)
     password_entry.delete(0, END)
     password_entry.insert(0, password)
+
 
 # Create the user interface
 window = tk.Tk()
@@ -415,9 +436,7 @@ if computer_ssid is None:
 
 auto_button.pack(side="right", padx=5)
 
-
-
-network_canvas=tk.Canvas(network_list_frame)
+network_canvas = tk.Canvas(network_list_frame)
 
 scrollbar_config = tk.Scrollbar(network_list_frame, orient="vertical", command=network_canvas.yview)
 scrollbar_config.pack(side="right", fill=Y, pady=5)
@@ -430,7 +449,7 @@ network_canvas.create_window((0, 0), window=networks_frame, anchor="nw")
 
 network_canvas.pack(fill="both", padx=5, pady=5, expand=True)
 
-#networks_frame.pack(fill="both", padx=5, pady=5)
+# networks_frame.pack(fill="both", padx=5, pady=5)
 selected_network = tk.StringVar(value="")
 
 # Password entry
@@ -463,6 +482,7 @@ tk.Label(diagnostics_frame, textvariable=ip_address).grid(row=3, column=1, stick
 
 def on_mouse_wheel(event):
     network_canvas.yview_scroll(-1 * (event.delta // 120), "units")
+
 
 window.bind_all("<MouseWheel>", on_mouse_wheel)
 

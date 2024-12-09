@@ -3,7 +3,7 @@ import platform
 import re
 import subprocess
 import tkinter as tk
-from tkinter import ttk, messagebox, PhotoImage, Y
+from tkinter import ttk, messagebox, PhotoImage, Y, END
 
 from yocto_api import YAPI, YRefParam
 from yocto_network import YNetwork
@@ -349,12 +349,14 @@ def apply_computer_settings():
     if ssid is None:
         messagebox.showerror("Error", "Message")
         return
+    selected_network.set(ssid)
     password = get_wifi_password(ssid)
     if password is None:
         messagebox.showerror("Title", "Message")
         return
-    wireless.joinNetwork(ssid, password)
-
+    #password_entry.set(password)
+    password_entry.delete(0, END)
+    password_entry.insert(0, password)
 
 # Create the user interface
 window = tk.Tk()

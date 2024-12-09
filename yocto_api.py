@@ -1171,7 +1171,7 @@ class YAPI:
                         YAPI._yApiCLibFile = libpath + "\\cdll\\yapi.dll"
 
                 elif arch == '64bit':
-                    if machine == 'ARM64':
+                    if 'ARM64' in sys.version:
                         YAPI._yApiCLibFile = libpath + "\\cdll\\yapiARM.dll"
                     else:
                         YAPI._yApiCLibFile = libpath + "\\cdll\\yapi64.dll"

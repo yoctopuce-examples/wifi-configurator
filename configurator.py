@@ -360,7 +360,6 @@ def save_settings():
 
 def apply_computer_settings():
     """Applies the wifi parameter of the computer to the Yocto-Wireless."""
-    print("poeut")
     ssid = get_current_ssid()
     if ssid is None:
         messagebox.showerror("Error", "Unable to determine current SSID used by the computer")
@@ -381,6 +380,7 @@ def apply_computer_settings():
 
 # Create the user interface
 window = tk.Tk()
+window.iconbitmap("blue_and_white.ico")
 window.title("Wi-Fi configuration tool")
 window.option_add("*Font", f"{FONT_NAME} {FONT_SIZE}")
 eye_open = PhotoImage(data=base64.b64decode(EYE_OPEN_BASE64))
@@ -436,7 +436,7 @@ if computer_ssid is None:
 
 auto_button.pack(side="right", padx=5)
 
-network_canvas = tk.Canvas(network_list_frame)
+network_canvas = tk.Canvas(network_list_frame, borderwidth=1, relief="sunken")
 
 scrollbar_config = tk.Scrollbar(network_list_frame, orient="vertical", command=network_canvas.yview)
 scrollbar_config.pack(side="right", fill=Y, pady=5)

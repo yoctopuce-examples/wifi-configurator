@@ -3,7 +3,8 @@ import platform
 import re
 import subprocess
 import tkinter as tk
-from tkinter import ttk, messagebox, PhotoImage, Y, END
+from tkinter import ttk
+from tkinter.messagebox import showerror,showwarning
 
 from yocto_api import YAPI, YRefParam
 from yocto_network import YNetwork
@@ -176,7 +177,7 @@ def detect_yoctohub():
     network = YNetwork.FindNetwork(f"{serial}.network")
     error_label.config(text="")
     init_frame.pack_forget()
-    main_frame.pack(fill=tk.BOTH, expand=True)
+    main_frame.pack(fill='both', expand=True)
     window.after(500, read_current_config)
 
 
@@ -199,7 +200,7 @@ def module_disconnected():
     not_found_msg = "Error: the device has been disconnected"
     error_label.config(text=not_found_msg)
     main_frame.pack_forget()
-    init_frame.pack(fill=tk.BOTH, expand=True)
+    init_frame.pack(fill='both', expand=True)
     window.after(1000, detect_yoctohub)
 
 
@@ -286,7 +287,7 @@ def connect_to_wifi():
     global wlans, selected_network
     ssid = selected_network.get()
     if not ssid:
-        messagebox.showwarning("Error", "No network selected")
+        showwarning("Error", "No network selected")
         return
     sec = wlan_sec(ssid)
     if sec == "OPEN":
@@ -294,7 +295,7 @@ def connect_to_wifi():
     else:
         passkey = password_entry.get()
         if passkey == "":
-            messagebox.showwarning("Error", "Password cannot be empty")
+            showwarning("Error", "Password cannot be empty")
             return
         passkey = sec[:3] + ":" + passkey
     wireless.joinNetwork(ssid, passkey)
@@ -340,7 +341,7 @@ def apply_device_name():
     global name_changed
     new_name = device_name_entry.get()
     if not re.match("^[-A-Za-z0-9]{1,15}$", new_name):
-        messagebox.showerror("Invalid Name",
+        showerror("Invalid Name",
                              "Device name can only contain alphanumeric characters and '-'" +
                              ", and must be at most 15 characters long.")
         return False
@@ -362,19 +363,19 @@ def apply_computer_settings():
     """Applies the wifi parameter of the computer to the Yocto-Wireless."""
     ssid = get_current_ssid()
     if ssid is None:
-        messagebox.showerror("Error", "Unable to determine current SSID used by the computer")
+        showerror("Error", "Unable to determine current SSID used by the computer")
         return
     selected_network.set(ssid)
     system = platform.system()
     if system == "Linux":
-        messagebox.showwarning("Warning", "Decoding of network password is not supported on Linux.")
+        showwarning("Warning", "Decoding of network password is not supported on Linux.")
         return
     password = get_wifi_password(ssid)
     if password is None:
-        messagebox.showerror("Error", "Unable to get current password for %s network.\nRetry with admin rights" % ssid)
+        showerror("Error", "Unable to get current password for %s network.\nRetry with admin rights" % ssid)
         return
     # password_entry.set(password)
-    password_entry.delete(0, END)
+    password_entry.delete(0, 'end')
     password_entry.insert(0, password)
 
 
@@ -383,20 +384,20 @@ window = tk.Tk()
 window.iconbitmap("blue_and_white.ico")
 window.title("Wi-Fi configuration tool")
 window.option_add("*Font", f"{FONT_NAME} {FONT_SIZE}")
-eye_open = PhotoImage(data=base64.b64decode(EYE_OPEN_BASE64))
-eye_closed = PhotoImage(data=base64.b64decode(EYE_CLOSED_BASE64))
+eye_open = tk.PhotoImage(data=base64.b64decode(EYE_OPEN_BASE64))
+eye_closed = tk.PhotoImage(data=base64.b64decode(EYE_CLOSED_BASE64))
 
 # Placeholder frame (initial view)
 init_frame = tk.Frame(window)
-init_frame.pack(fill=tk.BOTH, expand=True)
+init_frame.pack(fill='both', expand=True)
 intro_label = tk.Label(init_frame, padx=40, pady=30,
                        text="This tool will help you configure a\nYoctoHub-Wireless-n\nto connect to your Wi-Fi network.")
-intro_label.pack(expand=True, fill=tk.BOTH)
+intro_label.pack(expand=True, fill='both')
 error_label = tk.Label(init_frame, text="", fg="red", wraplength=400)
 error_label.pack(pady=(10, 0))  # Add some spacing between the text and the error label
 intro_label = tk.Label(init_frame, padx=40, pady=30,
                        text="Use a USB cable connected to the\n'Control Port' of the YoctoHub-Wireless-n\nto start the configuration.")
-intro_label.pack(expand=True, fill=tk.BOTH)
+intro_label.pack(expand=True, fill='both')
 close_button = ttk.Button(init_frame, text="Close", command=window.destroy)
 close_button.pack(side=tk.BOTTOM, anchor="e", padx=10, pady=10)
 
@@ -439,7 +440,7 @@ auto_button.pack(side="right", padx=5)
 network_canvas = tk.Canvas(network_list_frame, borderwidth=1, relief="sunken")
 
 scrollbar_config = tk.Scrollbar(network_list_frame, orient="vertical", command=network_canvas.yview)
-scrollbar_config.pack(side="right", fill=Y, pady=5)
+scrollbar_config.pack(side="right", fill='y', pady=5)
 
 network_canvas.configure(yscrollcommand=scrollbar_config.set)
 

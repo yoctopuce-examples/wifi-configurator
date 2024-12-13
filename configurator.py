@@ -1,9 +1,14 @@
-import re, base64
+import base64
+import platform
+import re
+import subprocess
 import tkinter as tk
-from tkinter import ttk, messagebox, PhotoImage
+from tkinter import ttk
+from tkinter.messagebox import showerror,showwarning
+
 from yocto_api import YAPI, YRefParam
 from yocto_network import YNetwork
-from yocto_wireless import YWireless, YWlanRecord
+from yocto_wireless import YWireless
 
 # User interface defaults
 FONT_NAME = "Arial"
@@ -24,6 +29,122 @@ cklEQVQY082MVw6DQBBDty8ldEJC79z/iKxBCDgAEv7wjJ81Q94oZ7pnXRiLhL6ylIUYgR2fbKBqm8ph
 uZRc5J6V2l8DPxLVP/D98JchN8ZcNAtFw2Zcusf/sYLzmFzVt/AuIo9pBbZbBA3Pk1BdAAAAAElFTkSuQmCC
 """
 
+
+# Function to get current wifi settings
+
+def get_current_ssid_macos():
+    result = subprocess.run(
+        ["networksetup", "-getairportnetwork", "en0"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=True
+    )
+    output = result.stdout.strip()
+    if "Current Wi-Fi Network" in output:
+        ssid = output.split(": ")[1]
+        return ssid
+    return None
+
+
+def get_current_ssid_linux():
+    result = subprocess.run(
+        ["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=True
+    )
+    lines = result.stdout.strip().split("\n")
+    for line in lines:
+        if line.startswith("yes:"):
+            return line.split(":")[1]
+    return None
+
+
+def get_current_ssid_win():
+    try:
+        result = subprocess.run(
+            ["netsh", "wlan", "show", "profile"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            check=True
+        )
+        lines = result.stdout.strip().split("\n")
+        for line in lines:
+            if "All User Profile" in line:
+                return line.split(":")[1].strip()
+    except subprocess.CalledProcessError:
+        return None
+    return None
+
+
+def get_current_ssid():
+    """
+    return current used SSID
+    """
+    system = platform.system()
+    if system == "Windows":
+        return get_current_ssid_win()
+    elif system == "Linux":
+        return get_current_ssid_linux()
+    else:
+        return get_current_ssid_macos()
+
+
+def get_wifi_password_macos(ssid):
+    try:
+        result = subprocess.run(
+            ["security", "find-generic-password", "-D", "AirPort network password", "-a", ssid, "-w"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            check=True
+        )
+        password = result.stdout.strip()
+        return password
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 44:  # Mot de passe non trouvé
+            print(f"Aucun mot de passe trouvé pour le réseau : {ssid}")
+        else:
+            print(f"Erreur lors de la récupération du mot de passe : {e}")
+        return None
+
+
+def get_wifi_password_linux(ssid):
+    return None
+
+
+def get_wifi_password_win(ssid):
+    result = subprocess.run(
+        ["netsh", "wlan", "show", "profile", f"name={ssid}", "key=clear"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=True
+    )
+    for line in result.stdout.splitlines():
+        if "Key Content" in line:
+            return line.split(":")[1].strip()
+    return None
+
+
+def get_wifi_password(ssid):
+    """
+    return passworkd for a wifi network
+    """
+    system = platform.system()
+    if system == "Windows":
+        return get_wifi_password_win(ssid)
+    elif system == "Linux":
+        return get_wifi_password_linux(ssid)
+    else:
+        return get_wifi_password_macos(ssid)
+
+
+computer_ssid = get_current_ssid()
+
 # Yoctopuce objects
 wireless: YWireless
 network: YNetwork
@@ -32,6 +153,7 @@ network: YNetwork
 wlans: list = []
 name_changed = False
 not_found_msg = "No YoctoHub-Wireless-n found"
+
 
 def detect_yoctohub():
     global wireless, network
@@ -42,7 +164,7 @@ def detect_yoctohub():
         if errcode != YAPI.SUCCESS:
             errcode = YAPI.RegisterHub("usb", errmsg)
     if errcode != YAPI.SUCCESS:
-        error_label.config(text="Error: "+errmsg.value)
+        error_label.config(text="Error: " + errmsg.value)
         window.after(500, detect_yoctohub)
         return
     YAPI.UpdateDeviceList(errmsg)
@@ -55,8 +177,9 @@ def detect_yoctohub():
     network = YNetwork.FindNetwork(f"{serial}.network")
     error_label.config(text="")
     init_frame.pack_forget()
-    main_frame.pack(fill=tk.BOTH, expand=True)
+    main_frame.pack(fill='both', expand=True)
     window.after(500, read_current_config)
+
 
 def read_current_config():
     if not network.isOnline():
@@ -71,15 +194,17 @@ def read_current_config():
     except YAPI.YAPI_Exception:
         window.after(100, read_current_config)
 
+
 def module_disconnected():
     global not_found_msg
     not_found_msg = "Error: the device has been disconnected"
     error_label.config(text=not_found_msg)
     main_frame.pack_forget()
-    init_frame.pack(fill=tk.BOTH, expand=True)
+    init_frame.pack(fill='both', expand=True)
     window.after(1000, detect_yoctohub)
 
-def refresh_networks(quick=False, retries = 3):
+
+def refresh_networks(quick=False, retries=3):
     """Updates the list of available wireless networks"""
     global wlans, selected_network
     if not wireless.isOnline():
@@ -106,7 +231,7 @@ def refresh_networks(quick=False, retries = 3):
     headers = ["SSID", "Encryption", "Signal Strength"]
     for col, header in enumerate(headers):
         (tk.Label(networks_frame, text=header, font=(FONT_NAME, FONT_SIZE, "bold")).
-         grid(row=0, column=col, padx=5, pady=2,sticky="w"))
+         grid(row=0, column=col, padx=5, pady=2, sticky="w"))
     for row, wlan in enumerate(wlans, start=1):
         tk.Radiobutton(
             networks_frame,
@@ -162,7 +287,7 @@ def connect_to_wifi():
     global wlans, selected_network
     ssid = selected_network.get()
     if not ssid:
-        messagebox.showwarning("Error", "No network selected")
+        showwarning("Error", "No network selected")
         return
     sec = wlan_sec(ssid)
     if sec == "OPEN":
@@ -170,7 +295,7 @@ def connect_to_wifi():
     else:
         passkey = password_entry.get()
         if passkey == "":
-            messagebox.showwarning("Error", "Password cannot be empty")
+            showwarning("Error", "Password cannot be empty")
             return
         passkey = sec[:3] + ":" + passkey
     wireless.joinNetwork(ssid, passkey)
@@ -186,7 +311,7 @@ def update_diagnostics():
         rdy = network.get_readiness()
         chan = wireless.get_channel()
         linkq = wireless.get_linkQuality()
-        readinames = [ "down", "network exists", "network linked", "LAN ready", "WWW ready" ]
+        readinames = ["down", "network exists", "network linked", "LAN ready", "WWW ready"]
         conn_status.set(f"{rdy}- {readinames[rdy]}")
         last_message.set(wireless.get_message())
         if chan > 0:
@@ -210,19 +335,21 @@ def on_device_name_change(*args):
     name_changed = True
     apply_button.config(state="normal")
 
+
 def apply_device_name():
     """Applies the new device name."""
     global name_changed
     new_name = device_name_entry.get()
     if not re.match("^[-A-Za-z0-9]{1,15}$", new_name):
-        messagebox.showerror("Invalid Name",
-                             "Device name can only contain alphanumeric characters and '-'"+
+        showerror("Invalid Name",
+                             "Device name can only contain alphanumeric characters and '-'" +
                              ", and must be at most 15 characters long.")
         return False
     network.set_logicalName(new_name)
     apply_button.config(state="disabled")
     name_changed = False
     return True
+
 
 def save_settings():
     global name_changed
@@ -231,24 +358,46 @@ def save_settings():
     network.get_module().saveToFlash()
     window.destroy()
 
+
+def apply_computer_settings():
+    """Applies the wifi parameter of the computer to the Yocto-Wireless."""
+    ssid = get_current_ssid()
+    if ssid is None:
+        showerror("Error", "Unable to determine current SSID used by the computer")
+        return
+    selected_network.set(ssid)
+    system = platform.system()
+    if system == "Linux":
+        showwarning("Warning", "Decoding of network password is not supported on Linux.")
+        return
+    password = get_wifi_password(ssid)
+    if password is None:
+        showerror("Error", "Unable to get current password for %s network.\nRetry with admin rights" % ssid)
+        return
+    # password_entry.set(password)
+    password_entry.delete(0, 'end')
+    password_entry.insert(0, password)
+
+
 # Create the user interface
 window = tk.Tk()
+window.iconbitmap("blue_and_white.ico")
 window.title("Wi-Fi configuration tool")
 window.option_add("*Font", f"{FONT_NAME} {FONT_SIZE}")
-eye_open = PhotoImage(data=base64.b64decode(EYE_OPEN_BASE64))
-eye_closed = PhotoImage(data=base64.b64decode(EYE_CLOSED_BASE64))
+eye_open = tk.PhotoImage(data=base64.b64decode(EYE_OPEN_BASE64))
+eye_closed = tk.PhotoImage(data=base64.b64decode(EYE_CLOSED_BASE64))
 
 # Placeholder frame (initial view)
 init_frame = tk.Frame(window)
-init_frame.pack(fill=tk.BOTH, expand=True)
+init_frame.pack(fill='both', expand=True)
 intro_label = tk.Label(init_frame, padx=40, pady=30,
-    text="This tool will help you configure a\nYoctoHub-Wireless-n\nto connect to your Wi-Fi network.")
-intro_label.pack(expand=True, fill=tk.BOTH)
+                       text="This tool will help you configure a\nYoctoHub-Wireless-n\nto connect to your Wi-Fi network.")
+intro_label.pack(expand=True, fill='both')
 error_label = tk.Label(init_frame, text="", fg="red", wraplength=400)
 error_label.pack(pady=(10, 0))  # Add some spacing between the text and the error label
 intro_label = tk.Label(init_frame, padx=40, pady=30,
-    text="Use a USB cable connected to the\n'Control Port' of the YoctoHub-Wireless-n\nto start the configuration.")
-intro_label.pack(expand=True, fill=tk.BOTH)
+                       text="Use a USB cable connected to the\n'Control Port' of the YoctoHub-Wireless-n\nto start the configuration.")
+intro_label.pack(expand=True, fill='both')
 close_button = ttk.Button(init_frame, text="Close", command=window.destroy)
 close_button.pack(side=tk.BOTTOM, anchor="e", padx=10, pady=10)
 
@@ -281,8 +430,27 @@ networks_label = tk.Label(networks_label_frame, text="Available Networks:")
 networks_label.pack(side="left", padx=5)
 refresh_button = ttk.Button(networks_label_frame, text="Refresh", command=refresh_networks)
 refresh_button.pack(side="right", padx=5)
-networks_frame = tk.Frame(network_list_frame)
-networks_frame.pack(fill="both", padx=5, pady=5)
+
+auto_button = ttk.Button(networks_label_frame, text="Use computer settings", command=apply_computer_settings)
+if computer_ssid is None:
+    auto_button["state"] = tk.DISABLED
+
+auto_button.pack(side="right", padx=5)
+
+network_canvas = tk.Canvas(network_list_frame, borderwidth=1, relief="sunken")
+
+scrollbar_config = tk.Scrollbar(network_list_frame, orient="vertical", command=network_canvas.yview)
+scrollbar_config.pack(side="right", fill='y', pady=5)
+
+network_canvas.configure(yscrollcommand=scrollbar_config.set)
+
+networks_frame = tk.Frame(network_canvas)
+networks_frame.bind("<Configure>", lambda e: network_canvas.configure(scrollregion=network_canvas.bbox("all")))
+network_canvas.create_window((0, 0), window=networks_frame, anchor="nw")
+
+network_canvas.pack(fill="both", padx=5, pady=5, expand=True)
+
+# networks_frame.pack(fill="both", padx=5, pady=5)
 selected_network = tk.StringVar(value="")
 
 # Password entry
@@ -293,7 +461,7 @@ password_label.pack(side="left", padx=5)
 password_entry = tk.Entry(password_frame, show="*", width=30, state="disabled")
 password_entry.pack(side="left", padx=5)
 eye_button = tk.Button(password_frame, image=eye_open, command=toggle_password_visibility,
-                       font=(FONT_NAME, FONT_SIZE+2), relief="flat", state="disabled")
+                       font=(FONT_NAME, FONT_SIZE + 2), relief="flat", state="disabled")
 eye_button.pack(side="left")
 connect_button = ttk.Button(password_frame, text="Connect", command=connect_to_wifi, state="disabled")
 connect_button.pack(side="right", padx=5)
@@ -311,6 +479,13 @@ tk.Label(diagnostics_frame, textvariable=conn_status).grid(row=0, column=1, stic
 tk.Label(diagnostics_frame, textvariable=last_message).grid(row=1, column=1, sticky="w", padx=5, pady=2)
 tk.Label(diagnostics_frame, textvariable=link_quality).grid(row=2, column=1, sticky="w", padx=5, pady=2)
 tk.Label(diagnostics_frame, textvariable=ip_address).grid(row=3, column=1, sticky="w", padx=5, pady=2)
+
+
+def on_mouse_wheel(event):
+    network_canvas.yview_scroll(-1 * (event.delta // 120), "units")
+
+
+window.bind_all("<MouseWheel>", on_mouse_wheel)
 
 detect_yoctohub()
 main_frame.mainloop()

@@ -1,6 +1,7 @@
 import base64
 import platform
 import re
+import os
 import subprocess
 import tkinter as tk
 from tkinter import ttk
@@ -53,7 +54,8 @@ def get_current_ssid_linux():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         universal_newlines=True,
-        check=True
+        check=True,
+        env=dict(os.environ, LANG="C")
     )
     lines = result.stdout.strip().split("\n")
     for line in lines:

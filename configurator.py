@@ -115,6 +115,17 @@ def get_wifi_password_macos(ssid):
 
 
 def get_wifi_password_linux(ssid):
+    result = subprocess.run(
+        ["nmcli", "-s", "-f", "802-11-wireless-security.psk", "connection", "show", ssid],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=True,
+        env=dict(os.environ, LANG="C")
+    )
+    lines = result.stdout.strip().split("\n")
+    for line in lines:
+        return line.split(":")[1].strip()
     return None
 
 
@@ -369,9 +380,6 @@ def apply_computer_settings():
         return
     selected_network.set(ssid)
     system = platform.system()
-    if system == "Linux":
-        showwarning("Warning", "Decoding of network password is not supported on Linux.")
-        return
     password = get_wifi_password(ssid)
     if password is None:
         showerror("Error", "Unable to get current password for %s network.\nRetry with admin rights" % ssid)
